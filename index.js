@@ -29,7 +29,7 @@
 
       <select id="nslv_type" style="font-size:13px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;">
         <option value="soaplog">SOAP log</option>
-        <option value="restlog">REST log</option>
+        <option value="restwslog">REST log</option>
       </select>
 
       <span style="font-size:13px;">Integration ID:</span>
@@ -101,7 +101,7 @@
   function getUrl() {
     const id   = document.getElementById('nslv_id').value.trim() || '5';
     const type = document.getElementById('nslv_type').value;
-    const q = type === 'soaplog' ? 'soaplogrange' : 'restlogrange';
+    const q = type === 'soaplog' ? 'soaplogrange' : 'restwslogrange';
     const offset = page > 0 ? '&si=' + page : '';
     return '/app/common/integration/integrapp.nl?r=T&id=' + id + '&machine=' + type + offset + '&q=' + q;
   }
