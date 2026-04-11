@@ -101,8 +101,9 @@
   function getUrl() {
     const id   = document.getElementById('nslv_id').value.trim() || '5';
     const type = document.getElementById('nslv_type').value;
+    const q = type === 'soaplog' ? 'soaplogrange' : 'restlogrange';
     const offset = page > 0 ? '&si=' + page : '';
-    return '/app/common/integration/integrapp.nl?r=T&id=' + id + '&machine=' + type + offset;
+    return '/app/common/integration/integrapp.nl?r=T&id=' + id + '&machine=' + type + offset + '&q=' + q;
   }
 
   function badge(s) {
