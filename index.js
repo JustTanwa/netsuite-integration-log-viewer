@@ -50,11 +50,9 @@
     <!-- ── Table ── -->
     <div style="flex:1;overflow:auto;">
       <table id="nslv_tbl" width="100%" style="border-collapse:collapse;font-size:13px;">
-        <thead>
+        <thead id="nslv_thead">
           <tr style="background:#f9fafb;position:sticky;top:0;z-index:1;">
-            ${['Time','Dur (s)','Action','API ver','Status','User','OK','Fail','Request','Response']
-              .map(h => `<th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font-weight:500;">${h}</th>`)
-              .join('')}
+            <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font-weight:500;">Time</th>
           </tr>
         </thead>
         <tbody id="nslv_body">
@@ -163,10 +161,84 @@
     return r.text();
   }
 
+  // ── Column definitions per log type ──────────────────────────────────────
+  const SOAP_COLS = ['Time', 'Dur (s)', 'Action', 'API ver', 'Status', 'User', 'OK', 'Fail'];
+  const REST_COLS = ['Time', 'Dur (s)', 'Status', 'User', 'Method', 'HTTP code', 'URL'];
+
+  function isSoap() {
+    return document.getElementById('nslv_type').value === 'soaplog';
+  }
+
+  function renderHeaders() {
+    const cols = isSoap() ? SOAP_COLS : REST_COLS;
+    const totalCols = cols.length + 2; // +2 for Request / Response
+    const thStyle = 'text-align:left;padding:8px 12px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font-weight:500;';
+    document.getElementById('nslv_thead').innerHTML =
+      '<tr style="background:#f9fafb;position:sticky;top:0;z-index:1;">'
+      + [...cols, 'Request', 'Response'].map(h => '<th style="' + thStyle + '">' + h + '</th>').join('')
+      + '</tr>';
+    return totalCols;
+  }
+
+  function parseSoapRow(tr) {
+    const td = tr.querySelectorAll('td');
+    const qa = tr.querySelector('a[id^="request"]');
+    const ra = tr.querySelector('a[id^="response"]');
+    if (td.length < 8) return null;
+    return {
+      type:   'soap',
+      time:   td[0]?.textContent.trim(),
+      dur:    td[1]?.textContent.trim(),
+      action: td[2]?.textContent.trim(),
+      ver:    td[3]?.textContent.trim(),
+      status: td[4]?.textContent.trim(),
+      user:   td[5]?.textContent.trim(),
+      ok:     td[6]?.textContent.trim(),
+      fail:   td[7]?.textContent.trim(),
+      req:    (qa?.getAttribute('HREF') || qa?.getAttribute('href') || '').trim(),
+      resp:   (ra?.getAttribute('HREF') || ra?.getAttribute('href') || '').trim()
+    };
+  }
+
+  function parseRestRow(tr) {
+    const td = tr.querySelectorAll('td');
+    const qa = tr.querySelector('a[id^="request"]');
+    const ra = tr.querySelector('a[id^="response"]');
+    if (td.length < 7) return null;
+    return {
+      type:       'rest',
+      time:       td[0]?.textContent.trim(),
+      dur:        td[1]?.textContent.trim(),
+      status:     td[2]?.textContent.trim(),
+      user:       td[3]?.textContent.trim(),
+      method:     td[4]?.textContent.trim(),
+      httpCode:   td[5]?.textContent.trim(),
+      url:        td[6]?.textContent.trim(),
+      req:        (qa?.getAttribute('HREF') || qa?.getAttribute('href') || '').trim(),
+      resp:       (ra?.getAttribute('HREF') || ra?.getAttribute('href') || '').trim()
+    };
+  }
+
+  function renderSoapRow(row, i) {
+    const failStyle = row.fail && row.fail !== '0' ? 'color:#dc2626;' : '';
+    return [row.time, row.dur, row.action, row.ver, badge(row.status), row.user, row.ok, row.fail]
+      .map((v, j) => '<td style="padding:8px 12px;' + (j === 7 ? failStyle : '') + '">' + (v || '—') + '</td>')
+      .join('');
+  }
+
+  function renderRestRow(row, i) {
+    const codeNum = parseInt(row.httpCode, 10);
+    const codeStyle = codeNum >= 400 ? 'color:#dc2626;font-weight:500;' : codeNum >= 300 ? 'color:#a16207;' : '';
+    return [row.time, row.dur, badge(row.status), row.user, row.method, row.httpCode, row.url]
+      .map((v, j) => '<td style="padding:8px 12px;' + (j === 5 ? codeStyle : j === 6 ? 'font-size:11px;color:#6b7280;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' : '') + '" title="' + (v || '') + '">' + (v || '—') + '</td>')
+      .join('');
+  }
+
   // ── Load log list ─────────────────────────────────────────────────────────
   async function load() {
+    const totalCols = renderHeaders();
     document.getElementById('nslv_body').innerHTML =
-      '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#9ca3af;">Loading…</td></tr>';
+      '<tr><td colspan="' + totalCols + '" style="text-align:center;padding:2rem;color:#9ca3af;">Loading…</td></tr>';
     try {
       const r = await fetch(getUrl(), { credentials: 'include' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -174,35 +246,18 @@
       const doc  = new DOMParser().parseFromString(html, 'text/html');
       const trs  = doc.querySelectorAll('tr.uir-list-row-tr');
       rows = [];
+      const soap = isSoap();
       trs.forEach(tr => {
-        const td = tr.querySelectorAll('td');
-        const qa = tr.querySelector('a[id^="request"]');
-        const ra = tr.querySelector('a[id^="response"]');
-        if (td.length >= 8) {
-          rows.push({
-            time:   td[0]?.textContent.trim(),
-            dur:    td[1]?.textContent.trim(),
-            action: td[2]?.textContent.trim(),
-            ver:    td[3]?.textContent.trim(),
-            status: td[4]?.textContent.trim(),
-            user:   td[5]?.textContent.trim(),
-            ok:     td[6]?.textContent.trim(),
-            fail:   td[7]?.textContent.trim(),
-            req:    (qa?.getAttribute('HREF') || qa?.getAttribute('href') || '').trim(),
-            resp:   (ra?.getAttribute('HREF') || ra?.getAttribute('href') || '').trim()
-          });
-        }
+        const row = soap ? parseSoapRow(tr) : parseRestRow(tr);
+        if (row) rows.push(row);
       });
 
       if (!rows.length) {
         document.getElementById('nslv_body').innerHTML =
-          '<tr><td colspan="10" style="text-align:center;padding:3rem;color:#9ca3af;">No entries found</td></tr>';
+          '<tr><td colspan="' + totalCols + '" style="text-align:center;padding:3rem;color:#9ca3af;">No entries found</td></tr>';
       } else {
         document.getElementById('nslv_body').innerHTML = rows.map((row, i) => {
-          const failStyle = row.fail && row.fail !== '0' ? 'color:#dc2626;' : '';
-          const cells = [row.time, row.dur, row.action, row.ver, badge(row.status), row.user, row.ok, row.fail]
-            .map((v, j) => '<td style="padding:8px 12px;' + (j === 7 ? failStyle : '') + '">' + (v || '—') + '</td>')
-            .join('');
+          const cells = soap ? renderSoapRow(row, i) : renderRestRow(row, i);
           const reqBtn  = row.req  ? '<button style="font-size:12px;padding:2px 10px;border-radius:5px;border:1px solid #93c5fd;color:#1d4ed8;background:#eff6ff;cursor:pointer;" onclick="window.__nslvOpen(' + i + ',\'req\')">Request</button>'  : '—';
           const respBtn = row.resp ? '<button style="font-size:12px;padding:2px 10px;border-radius:5px;border:1px solid #93c5fd;color:#1d4ed8;background:#eff6ff;cursor:pointer;" onclick="window.__nslvOpen(' + i + ',\'resp\')">Response</button>' : '—';
           return '<tr style="border-bottom:1px solid #f3f4f6;" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'\'">'
@@ -217,7 +272,7 @@
       document.getElementById('nslv_prev').disabled = page === 0;
     } catch (e) {
       document.getElementById('nslv_body').innerHTML =
-        '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#dc2626;">Error: ' + e.message + ' — are you logged into NetSuite?</td></tr>';
+        '<tr><td colspan="' + totalCols + '" style="text-align:center;padding:2rem;color:#dc2626;">Error: ' + e.message + ' — are you logged into NetSuite?</td></tr>';
     }
   }
 
@@ -263,10 +318,13 @@
     rawStore    = { req: '', resp: '' };
     fmtPretty   = true;
     document.getElementById('nslv_fmtbtn').textContent = 'Raw';
+    const detail = currentRow.type === 'rest'
+      ? currentRow.method + ' ' + currentRow.url + ' · ' + currentRow.httpCode
+      : currentRow.action + ' · ' + currentRow.ver;
     document.getElementById('nslv_mtitle').textContent =
       (type === 'req' ? 'Request' : 'Response') +
       ' — ' + currentRow.time +
-      ' — ' + currentRow.action +
+      ' — ' + detail +
       ' (' + currentRow.status + ')';
     document.getElementById('nslv_modal').style.display = 'flex';
     renderTabs(currentRow);
