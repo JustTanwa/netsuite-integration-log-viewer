@@ -50,21 +50,13 @@ This script injects a full log browser directly into the page that:
 Go to **Setup > Integration > Manage Integrations**, open the integration record, and note the internal ID from the URL — it will look like `&id=5`. Enter that number in the Integration ID field.
 
 
-## Columns in the log table
+## Preview of UI
 
-| Column | Description |
-|---|---|
-| Time | When the request was made |
-| Dur (s) | How long the request took in seconds |
-| Action | The operation type (e.g. `get`, `search`, `upsert`) |
-| API ver | The SuiteTalk or REST API version used |
-| Status | `FINISHED`, `FAILED`, or other states — colour coded |
-| User | The NetSuite user email that made the request |
-| OK | Number of records successfully processed |
-| Fail | Number of records that failed — shown in red if non-zero |
-| Request | Opens the outbound message |
-| Response | Opens the inbound response |
+The request and response button now open a new pop up showing the request payload instead of downloading the file.
 
+![screenshot-of-netsuite-viewer](https://raw.githubusercontent.com/JustTanwa/netsuite-integration-log-viewer/refs/heads/main/netsuite-log-viewer.JPG)
+
+![screenshot-of-netsuite-viewer-restwslog](https://raw.githubusercontent.com/JustTanwa/netsuite-integration-log-viewer/refs/heads/main/netsuite-log-viewer-rest.JPG)
 
 ## Security and privacy
 
