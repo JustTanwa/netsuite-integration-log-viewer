@@ -1,74 +1,75 @@
-# NetSuite Integration Log Viewer
+# NetSuite Admin and Developer Toolkit
 
-A browser console script that overlays a clean, readable UI on top of NetSuite for browsing SOAP and REST integration logs without downloading any files.
+A Tampermonkey userscript that adds a keyboard-launched developer console to NetSuite. It includes SuiteQL, a SuiteScript module runner, and integration-log browsing for SOAP, REST, and RESTlet logs.
 
+## Install and use
 
-## Who is this for?
+1. Open [netsuite-admin-toolkit.user.js](./netsuite-admin-toolkit.user.js) in Tampermonkey and install it.
+2. Log into NetSuite and navigate to a page in your account.
+3. Press **Ctrl + /** to open or close the console.
+4. Press **Alt + Shift + P** to open the command menu.
 
-This tool is for **NetSuite administrators, integration developers, and technical consultants** who need to inspect integration SOAP web service or REST API requests but find the native NetSuite log experience frustrating to work with.
+## Tools
 
-Specifically, you'll find this useful if you:
+### SuiteQL Runner
 
-- Debug integrations between NetSuite and third-party systems
-- Investigate failed records, unexpected responses, or API errors
-- Work with SuiteTalk SOAP or REST API
-- Are on a multiple environment setup where installing browser extensions isn't practical
-- Just want to read a log entry without having a file downloaded to your machine every time you click "view"
+Enter a SuiteQL query and select **Run query**, or press **Ctrl + Enter**. Results are filterable and sortable. The tool displays execution time separately from rendering time.
 
-No installation or extension justopen DevTools, you can run this.
+The runner loads `N/query` from the current page's global `require()` function, or from `/app/center/userprefs.nl` in a hidden same-origin iframe if needed. It prefers `runSuiteQL.promise`. If the loaded module has no Promise API, it reports a warning and calls synchronous `runSuiteQL`, which may briefly block the page. `runSuiteQL` returns at most 5,000 rows; use paged queries for larger results.
 
+### SuiteScript Runner
 
-## The problem it solves
+The editor uses locally bundled CodeMirror with JavaScript syntax highlighting. Enter code and click **Run script**. The runner provides:
 
-In NetSuite's native integration log UI (`Setup > Integration > Web Services Usage Log`), clicking **Request** or **Response** on any log entry triggers a file download. There is no way to read the content inline. For anyone doing active debugging this is slow and clutters your downloads folder with dozens of `.xml` or `.json` files.
+- `require(['N/record', 'N/search'], callback)` to load modules using NetSuite's page module loader
+- `await getModule('N/query')` as a Promise-based module helper
+- `console.log`, `console.info`, `console.warn`, `console.error`, `console.debug`, and `log`
 
-This script injects a full log browser directly into the page that:
+Example:
 
-- Fetches log entries using your existing authenticated session (no re-login, no API keys)
-- Displays SOAP/XML and REST/JSON content inline in a readable modal
-- Auto-formats raw XML and JSON with indentation so it's actually readable
-- Lets you page through entries and switch between log types without leaving the page
+```javascript
+const query = await getModule('N/query');
+const result = await query.runSuiteQL.promise({
+  query: 'SELECT id, entityid FROM customer WHERE ROWNUM <= 10'
+});
+console.log(result.asMappedResults());
+```
 
+Scripts run with your current NetSuite role and may read or change data that role can access. Only run code you understand. The output panel shows console messages, returned values, errors, and runtime.
 
-## Requirements
+### Command menu
 
-- Access to a NetSuite account with integration logs enabled
-- A modern browser (Chrome, Edge, Firefox, or Safari)
-- You must be **logged into NetSuite** in the same browser tab when you run the script — it piggybacks on your active session cookies
-- DevTools console access (F12)
+Press **Alt + Shift + P**, choose a command, then enter an identifier:
 
+- **Edit saved search** opens a saved search by numeric internal ID.
+- **Open script record** accepts a numeric internal ID or a `customscript_...` script ID. Script IDs are resolved using `N/search` before opening the record.
 
-## How to use it
+### Integration Logs
 
-1. Log into NetSuite and navigate to any page
-2. Open DevTools with `F12` and go to the **Console** tab
-3. Paste the entire contents of `index.js` and press `Enter`
-4. The log viewer overlay will appear immediately
+The tool loads integration names and IDs from `/app/common/integration/integrapplist.nl` using the active session. Choose SOAP, REST, or RESTlet logs and select an integration from the dropdown. Log rows can be paged, filtered, and sorted; request and response payloads open inline.
 
-### Finding your integration ID
+RESTlet records are requested from the NetSuite route:
 
-Go to **Setup > Integration > Manage Integrations**, open the integration record, and note the internal ID from the URL — it will look like `&id=5`. Enter that number in the Integration ID field.
+`/app/common/integration/integrapp.nl?id=…&q=restletlogrange&si=…&machine=restletlog&f=T&si_restletlogsortfld=time`
 
+NetSuite's returned log HTML is parsed in the browser, so a change to that page's table markup may require an update.
 
-## Preview of UI
+## Development
 
-The request and response button now open a new pop up showing the request payload instead of downloading the file.
+The installable userscript is built from `src/main.js`; CodeMirror and its JavaScript mode are bundled locally, with no runtime CDN dependency. CodeMirror's license is included in [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md).
 
-![screenshot-of-netsuite-viewer](https://raw.githubusercontent.com/JustTanwa/netsuite-integration-log-viewer/refs/heads/main/netsuite-log-viewer.JPG)
+```sh
+npm install
+npm run build
+npm run check
+```
 
-![screenshot-of-netsuite-viewer-restwslog](https://raw.githubusercontent.com/JustTanwa/netsuite-integration-log-viewer/refs/heads/main/netsuite-log-viewer-rest.JPG)
+Tools are registered in `toolRegistry` and share the console shell and filterable/sortable `renderDataTable` component.
 
-## Security and privacy
+## Security and limitations
 
-- The script runs entirely in your browser and makes no external network requests
-- All fetches go to your NetSuite domain using your existing session — the same requests your browser would make if you clicked the native links
-- Nothing is sent to any third party
-- The script does not store, transmit, or log any data
-- Closing the overlay or refreshing the page removes it completely
-
-
-## Limitations
-
-- It does not support sorting or filtering 
-- If your session expires while the viewer is open, requests will fail with an HTTP 401 error, simply log back in and reload
-- Tested against NetSuite 2026.1; the script parses the native HTML table structure, so a significant UI change in a future release could require an update
+- The userscript makes no third-party network requests. It uses same-origin NetSuite pages and the current authenticated session.
+- SuiteQL and SuiteScript execution are subject to the current role's permissions.
+- NetSuite does not guarantee that `require()` or `N/query` is exposed on UI pages or that the preferences page can be embedded. Failure is surfaced to the user.
+- Saved search and script navigation uses the current NetSuite account.
+- Integration list, RESTlet log structure, and payload routes may vary between NetSuite versions.
